@@ -1,0 +1,783 @@
+---
+title: "AlignmentAnalysis2"
+author: "Line Danielsen and Simon Hansen"
+output: html_document
+---
+
+Load data and packages
+```{r}
+# Import libraries and set working directory
+library(ggplot2);library(lmerTest);library(cowplot);library(brms); library(Hmisc); library(tidyr)
+setwd("~/Uni_data2/align-linguistic-alignment/align/functions/analysis")
+
+# Load all the data
+dataMitsuko=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/Mitsuko/analysis/AlignmentC2C.txt')
+dataTMitsuko=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/Mitsuko/analysis/AlignmentT2T.txt')
+dataMitsukoS=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/Mitsuko/analysis/AlignmentC2C_Surrogate.txt')
+dataTMitsukoS=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/Mitsuko/analysis/AlignmentT2T_Surrogate.txt')
+
+dataCCPE=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/CCPE/analysis/AlignmentC2C.txt')
+dataTCCPE=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/CCPE/analysis/AlignmentT2T.txt')
+dataCCPES=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/CCPE/analysis/AlignmentC2C_Surrogate.txt')
+dataTCCPES=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/CCPE/analysis/AlignmentT2T_Surrogate.txt')
+
+
+dataHuman=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/HumanHuman/AlignmentC2C.txt')
+dataTHuman=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/HumanHuman/AlignmentT2T.txt')
+dataHumanS=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/HumanHuman/AlignmentC2C_Surrogate.txt')
+dataTHumanS=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/HumanHuman/AlignmentT2T_Surrogate.txt')
+
+```
+
+Clean bad data from H-H dataset
+```{r}
+#Remove bad datapoints from HumanHuman dataset
+#Data to be removed 
+dataToRemove = subset(dataTHuman, partner_direction == "A>AA"| partner_direction == "A>BB" | partner_direction =="AA>A"|partner_direction =="AA>B" | partner_direction =="B>AA"|partner_direction =="B>BA"|partner_direction =="B>BB"|partner_direction =="B>BBA"|partner_direction =="BA>A"|partner_direction =="BB>A"|partner_direction =="BB>B"|partner_direction =="BBA>A")
+#Remove from dataTurn
+dataTHuman = subset(dataTHuman, partner_direction=="A>B"|partner_direction=="B>A")
+#Remove it from the "data" df 
+dataHuman = subset(dataHuman,  condition_info!="phoneDialog434-condA.txt" | condition_info!="phoneDialog1125-condA.txt" | condition_info!="phoneDialog498-condA.txt"| condition_info!="phoneDialog1129-condA.txt" |condition_info!="phoneDialog510-condA.txt" |condition_info!="phoneDialog1153-condA.txt" |condition_info!="phoneDialog456-condA.txt"|condition_info!="phoneDialog1093-condA.txt"|condition_info!="phoneDialog486-condA.txt" |condition_info!="phoneDialog1076-condA.txt"|condition_info!="phoneDialog499-condA.txt"|condition_info!="phoneDialog142-condA.txt"|condition_info!="phoneDialog1059-condA.txt"|condition_info!="phoneDialog1150-condA.txt"|condition_info!="phoneDialog1133-condA.txt"|condition_info!="phoneDialog422-condA.txt"|condition_info!="phoneDialog447-condA.txt"|condition_info!="phoneDialog1096-condA.txt"|condition_info!="phoneDialog489-condA.txt"|condition_info!="phoneDialog459-condA.txt"|condition_info!="phoneDialog467-condA.txt"|condition_info!="phoneDialog1120-condA.txt")
+
+# Remove from surrogate
+dataTHumanS=dataTHumanS[!dataTHumanS$partner_direction == "A>BA",]
+dataHumanS = subset(dataHumanS,  condition_info!="phoneDialog434-condA.txt" | condition_info!="phoneDialog1125-condA.txt" | condition_info!="phoneDialog498-condA.txt"| condition_info!="phoneDialog1129-condA.txt" |condition_info!="phoneDialog510-condA.txt" |condition_info!="phoneDialog1153-condA.txt" |condition_info!="phoneDialog456-condA.txt"|condition_info!="phoneDialog1093-condA.txt"|condition_info!="phoneDialog486-condA.txt" |condition_info!="phoneDialog1076-condA.txt"|condition_info!="phoneDialog499-condA.txt"|condition_info!="phoneDialog142-condA.txt"|condition_info!="phoneDialog1059-condA.txt"|condition_info!="phoneDialog1150-condA.txt"|condition_info!="phoneDialog1133-condA.txt"|condition_info!="phoneDialog422-condA.txt"|condition_info!="phoneDialog447-condA.txt"|condition_info!="phoneDialog1096-condA.txt"|condition_info!="phoneDialog489-condA.txt"|condition_info!="phoneDialog459-condA.txt"|condition_info!="phoneDialog467-condA.txt"|condition_info!="phoneDialog1120-condA.txt")
+
+```
+
+Get dataset statistics
+```{r}
+library(dplyr)
+
+# Number of conversations
+length(unique(dataHuman$condition_info))
+length(unique(dataCCPE$condition_info))
+length(unique(dataMitsuko$condition_info))
+
+# mean length of conversation
+max_time_CPPE <-group_by(dataTCCPE, condition_info) %>% summarize(time = max(time)) %>% summarize(mean = mean(time), sd = sd(time))
+max_time_Human <-group_by(dataTHuman, condition_info) %>% summarize(time = max(time)) %>% summarize(mean = mean(time), sd = sd(time))
+max_time_Mitsuko <- group_by(dataTMitsuko, condition_info) %>% summarize(time = max(time)) %>% summarize(mean = mean(time), sd = sd(time))
+
+max_time_Mitsuko
+max_time_CPPE
+max_time_Human
+
+```
+
+Make turn-by-turn dataset with surrogate and real conversations
+```{r}
+#Combine surrogate and real data
+dataTHumanS$cond = "surrogate"
+dataTHuman$cond = "real"
+dataTMitsukoS$cond = "surrogate"
+dataTMitsuko$cond = "real"
+dataTCCPES$cond = "surrogate"
+dataTCCPE$cond = "real"
+
+dataMitsukoTOT = rbind(dataTMitsuko, dataTMitsukoS)
+dataHumanTOT = rbind(dataTHuman, dataTHumanS)
+dataCCPETOT = rbind(dataTCCPE, dataTCCPES)
+
+```
+
+Hypothesis 1: Real vs surrogate pairs
+```{r}
+
+# Do a few plots on outcome distribution 
+plot(density(dataHumanTOT$syntax_penn_lem2)) # Zero-inflated
+plot(density(dataHumanTOT$lexical_lem2)) # Zero-inflated
+plot(density(dataHumanTOT$cosine_semanticL, na.rm = T)) #Normal
+
+plot(density(dataCCPETOT$syntax_penn_lem2)) # Zero-inflated
+plot(density(dataCCPETOT$lexical_lem2)) # Zero-inflated
+plot(density(dataCCPETOT$cosine_semanticL, na.rm = T)) #Normal
+
+plot(density(dataMitsukoTOT$syntax_penn_lem2)) # Zero_inflated
+plot(density(dataMitsukoTOT$lexical_lem2)) # Zero_inflated
+plot(density(dataMitsukoTOT$cosine_semanticL, na.rm = T)) #Normal
+
+library(scales)
+
+# Rescale variables to make them suitable for for beta distribution
+dataMitsukoTOT$cosine_semanticL=rescale(dataMitsukoTOT$cosine_semanticL, to=c(0,1))
+dataCCPETOT$cosine_semanticL=rescale(dataCCPETOT$cosine_semanticL, to=c(0,1))
+dataHumanTOT$cosine_semanticL=rescale(dataHumanTOT$cosine_semanticL, to=c(0,1))
+dataHumanTOT$lexical_lem2=rescale(dataHumanTOT$lexical_lem2, to=c(0,1))
+dataHumanTOT$syntax_penn_lem2=rescale(dataHumanTOT$syntax_penn_lem2, to=c(0,1))
+
+
+# Check surrogate pairs against real pairs on each condition on each measure
+dataHumanTOT$cond = factor(dataHumanTOT$cond, levels = c("surrogate", "real"))
+dataMitsukoTOT$cond = factor(dataMitsukoTOT$cond, levels = c("surrogate", "real"))
+dataCCPETOT$cond = factor(dataCCPETOT$cond, levels = c("surrogate", "real"))
+
+# Make prior to help model converge
+prior=get_prior(mvbind(lexical_lem2, syntax_penn_lem2, cosine_semanticL) ~ cond + (1+scale(time)|condition_info), dataHumanTOT, family = 'zero_one_inflated_beta', prior = priors)
+
+priors= c(set_prior("normal(0,1)", class = "b", coef = "condreal", resp = "syntaxpennlem2"), set_prior("normal(0,1)", class = "b", coef = "condreal", resp = "lexicallem2"), set_prior("normal(0,1)", class = "b", coef = "condreal", resp = "cosinesemanticL"))
+
+# Human-Human model
+model_Human4=brm(mvbind(lexical_lem2, syntax_penn_lem2, cosine_semanticL) ~ cond + (1+scale(time)|condition_info), dataHumanTOT, family = 'zero_one_inflated_beta', chains = 2, cores = 2, prior = priors)
+
+# Human-Computer model
+model_Computer3=brm(mvbind(lexical_lem2, syntax_penn_lem2, cosine_semanticL) ~ cond + (1+scale(time)|condition_info), dataMitsukoTOT, family = 'zero_one_inflated_beta', chains = 2, cores = 2, prior = priors)
+
+# Human-WoZ model
+model_WoZ4=brm(mvbind(lexical_lem2, syntax_penn_lem2, cosine_semanticL) ~ cond + (1+scale(time)|condition_info), dataCCPETOT, family = 'zero_one_inflated_beta', chains = 2, cores = 2, prior = priors)
+
+# Summary of H-H
+summary(model_Human4)
+plot(model_Human3)
+save(model_Human3, file = "Surrogate_Human_Beta_Time.Rdata")
+
+# Summary of H-C
+summary(model_Computer3)
+plot(model_Computer3)
+save(model_Computer3, file = "Surrogate_Com_Beta_Time.Rdata")
+
+# Summary of H-WoZ
+summary(model_WoZ4)
+plot(model_WoZ3)
+save(model_WoZ4, file = "Surrogate_WoZ_Beta_Time_Final.Rdata")
+
+bayes_R2(model_WoZ4)
+
+#pp_check for models
+pp_check(model_Computer3, resp = "lexicallem2")
+pp_check(model_Computer3, resp = "cosinesemanticL")
+pp_check(model_Computer3, resp = "syntaxpennlem2")
+
+# Read in data
+load("Surrogate_Com_Beta_Time.Rdata")
+
+# Plot the marginal effects of baseline model
+plots=marginal_effects(model_WoZ3)
+
+title <- ggdraw() + 
+  draw_label(
+    "Human-WoZ",
+    fontface = 'bold',
+  )
+
+grids=cowplot::plot_grid(plotlist = plot(plots), ncol =3)
+
+plot_grid(title, grids, ncol=1, rel_heights = c(0.1, 1))
+
+```
+
+Combine all dataset
+```{r}
+# Only look at human direction
+dataTMitsukoH = dataTMitsuko[dataTMitsuko$partner_direction == "Judge:>Mitsuku:",]
+dataTCCPEH = dataTCCPE[dataTCCPE$partner_direction == "USER>ASSISTANT",]
+
+# Remove stanford pos tagger (Column 4 and 5)
+dataMitsukoTOT2 = dataMitsukoTOT[,-(4:5),drop=FALSE] 
+
+#Add int
+dataMitsukoTOT2$int = "H-C"
+dataCCPETOT$int = "H-WOZ"
+dataHumanTOT$int = "H-H"
+
+#Bind data together
+dataTOT = rbind(dataMitsukoTOT2, dataCCPETOT, dataHumanTOT)
+
+# Prepare dataset to make model
+dataTOT$Human = 0
+dataTOT$WOZ = 0
+dataTOT$Com = 0
+
+# Create dummy variables
+dataTOT$Human[dataTOT$int == "H-H"] = 1
+dataTOT$Com[dataTOT$int == "H-C"] = 1
+dataTOT$WOZ[dataTOT$int == "H-WOZ"] = 1
+
+```
+
+Hypotheses 2 and 3: Alingment predicted by interaction type and time
+```{r} 
+#Combined multiple outcome model - zero one inflated beta 
+p_load(scales)
+dataTOT$cosine_semanticL=rescale(dataTOT$cosine_semanticL, to=c(0,1))
+dataTOT$syntax_penn_lem2=rescale(dataTOT$syntax_penn_lem2, to=c(0,1))
+dataTOT$lexical_lem2=rescale(dataTOT$lexical_lem2, to=c(0,1))
+
+#dataTOT only contains the direction of human>human, human>WoZ, and human>computer
+
+full_brm_beta=brm(mvbind(cosine_semanticL, syntax_penn_lem2, lexical_lem2) ~ 1 + cond + scale(time)*WOZ + scale(time)*Com + scale(time) + (1+scale(time)|condition_info), dataTOT, family = "zero_one_inflated_beta", chains = 2, cores=2)
+save(full_brm_beta,file = "full_brm_beta.Rdata")
+plot(full_brm_beta)
+summary(full_brm_beta)
+
+#Compute R squared 
+bayes_R2(full_brm_beta)
+```
+
+Plot full model - H2 
+```{r} 
+############Extract estimates for posterior plot of H2  
+var = get_variables(full_brm_beta)
+head(var, 20)
+
+#Semantic: HH 
+x = spread_draws(full_brm_beta, b_cosinesemanticL_Intercept)
+HHsem_est = as.data.frame(x)
+HHsem_est = select(HHsem_est, b_cosinesemanticL_Intercept)
+HHsem_est = rename(HHsem_est, "estimate" = b_cosinesemanticL_Intercept)
+HHsem_est["condition"] = "1a: HH semantic" 
+
+#Semantic: HWoZ 
+x = spread_draws(full_brm_beta, b_cosinesemanticL_WOZ)
+HWsem_est = as.data.frame(x)
+HWsem_est = select(HWsem_est, b_cosinesemanticL_WOZ)
+HWsem_est = rename(HWsem_est, "estimate" = b_cosinesemanticL_WOZ)
+HWsem_est["condition"] = "1b: HWoZ semantic" 
+View(HHsem_est)
+
+#Semantic: HC 
+x = spread_draws(full_brm_beta, b_cosinesemanticL_Com)
+HCsem_est = as.data.frame(x)
+HCsem_est = select(HCsem_est, b_cosinesemanticL_Com)
+HCsem_est = rename(HCsem_est, "estimate" = b_cosinesemanticL_Com)
+HCsem_est["condition"] = "1c: HC semantic" 
+
+#Syntax: HH
+x = spread_draws(full_brm_beta, b_syntaxpennlem2_Intercept)
+HHsyn_est = as.data.frame(x)
+HHsyn_est = select(HHsyn_est, b_syntaxpennlem2_Intercept)
+HHsyn_est = rename(HHsyn_est, "estimate" = b_syntaxpennlem2_Intercept)
+HHsyn_est["condition"] = "2a: HH syntax" 
+
+#Syntax: HWoZ
+x = spread_draws(full_brm_beta, b_syntaxpennlem2_WOZ)
+HWsyn_est = as.data.frame(x)
+HWsyn_est = select(HWsyn_est, b_syntaxpennlem2_WOZ)
+HWsyn_est = rename(HWsyn_est, "estimate" = b_syntaxpennlem2_WOZ)
+HWsyn_est["condition"] = "2b: HWoZ syntax" 
+
+#Syntax: HC
+x = spread_draws(full_brm_beta, b_syntaxpennlem2_Com)
+HCsyn_est = as.data.frame(x)
+HCsyn_est = select(HCsyn_est, b_syntaxpennlem2_Com)
+HCsyn_est = rename(HCsyn_est, "estimate" = b_syntaxpennlem2_Com)
+HCsyn_est["condition"] = "2c: HC syntax" 
+
+#Lexical: HH
+x = spread_draws(full_brm_beta, b_lexicallem2_Intercept)
+HHlex_est = as.data.frame(x)
+HHlex_est = select(HHlex_est, b_lexicallem2_Intercept)
+HHlex_est = rename(HHlex_est, "estimate" = b_lexicallem2_Intercept)
+HHlex_est["condition"] = "3a: HH lexical" 
+
+#Lexical: HWoZ
+x = spread_draws(full_brm_beta, b_lexicallem2_WOZ)
+HWlex_est = as.data.frame(x)
+HWlex_est = select(HWlex_est, b_lexicallem2_WOZ)
+HWlex_est = rename(HWlex_est, "estimate" = b_lexicallem2_WOZ)
+HWlex_est["condition"] = "3b: HWoZ lexical" 
+
+#Lexical: HC
+x = spread_draws(full_brm_beta, b_lexicallem2_Com)
+HClex_est = as.data.frame(x)
+HClex_est = select(HClex_est, b_lexicallem2_Com)
+HClex_est = rename(HClex_est, "estimate" = b_lexicallem2_Com)
+HClex_est["condition"] = "3c: HC lexical" 
+
+############# Combine all estiamtes in one df and plot 
+full_model_estimates = rbind(HHsem_est, HWsem_est, HCsem_est, HHsyn_est, HWsyn_est, HCsyn_est, HHlex_est, HWlex_est, HClex_est)
+
+#Posterior distributions
+ggplot(full_model_estimates, aes(x=estimate, y=condition, fill = "dk")) +
+  stat_density_ridges(geom = "density_ridges_gradient", calc_ecdf = TRUE)+
+  scale_fill_manual(values = "skyblue3") +
+  labs(title = "Alignment for each condition") + 
+      theme(plot.caption = element_text(hjust = 0.5))
+```
+
+Plot full model - H3
+```{r}
+p_load(tidyverse)
+
+#plot marginal effects 
+plot(marginal_effects(full_brm_beta), rug = TRUE)
+
+head(var, 20)
+summary(full_brm_beta)
+
+#Plot posterior predictive linear effects (conditioned marginal effects)
+
+########################## WOZ condition 
+#Extract marginal effects
+con_1 <- data.frame(WOZ = 1, cond = "real")
+ma_1 <- marginal_effects(full_brm_beta,conditions = con_1)
+#plot(ma_1,points=TRUE, point_args = list(size = 0.5, alpha = 1/10))
+plot(ma_1)
+head(ma_1, 20)
+
+#Create df with marginal effects to plot 
+all_est = as.data.frame(ma_1[4:6])
+View(all_est)
+
+HW_sem_time = select(all_est, cosinesemanticL.cosinesemanticL_time.time, cosinesemanticL.cosinesemanticL_time.estimate__, cosinesemanticL.cosinesemanticL_time.lower__,cosinesemanticL.cosinesemanticL_time.upper__)
+HW_sem_time = rename(HW_sem_time,"time"=cosinesemanticL.cosinesemanticL_time.time, "estimate" = cosinesemanticL.cosinesemanticL_time.estimate__, "lower" = cosinesemanticL.cosinesemanticL_time.lower__, "upper" = cosinesemanticL.cosinesemanticL_time.upper__)
+HW_sem_time["condition"] = "semantic"
+
+HW_syn_time = select(all_est, cosinesemanticL.cosinesemanticL_time.time, syntaxpennlem2.syntaxpennlem2_time.estimate__, syntaxpennlem2.syntaxpennlem2_time.lower__, syntaxpennlem2.syntaxpennlem2_time.upper__)
+HW_syn_time = rename(HW_syn_time,"time"=cosinesemanticL.cosinesemanticL_time.time, "estimate" = syntaxpennlem2.syntaxpennlem2_time.estimate__, "lower" = syntaxpennlem2.syntaxpennlem2_time.lower__, "upper" = syntaxpennlem2.syntaxpennlem2_time.upper__)
+HW_syn_time["condition"] = "syntax"
+
+HW_lex_time = select(all_est, cosinesemanticL.cosinesemanticL_time.time,  lexicallem2.lexicallem2_time.estimate__, lexicallem2.lexicallem2_time.lower__, lexicallem2.lexicallem2_time.upper__)
+HW_lex_time = rename(HW_lex_time,"time"=cosinesemanticL.cosinesemanticL_time.time, "estimate" =  lexicallem2.lexicallem2_time.estimate__, "lower" = lexicallem2.lexicallem2_time.lower__, "upper" = lexicallem2.lexicallem2_time.upper__)
+HW_lex_time["condition"] = "lexical"
+
+#Plot alignment over time on all three measures with confidence intervals 
+HWoZ_align_time = ggplot2::ggplot() + 
+  geom_line(data = HW_sem_time, aes(x = time, estimate, colour = "blue")) +
+  geom_line(data = HW_syn_time, aes(x = time, y = estimate, colour = "red")) +
+  geom_line(data = HW_lex_time, aes(x = time, y = estimate, colour = "green")) +
+  scale_color_discrete(name = "Alignment measure", labels = c("Semantic", "Syntactic", "Lexical"))+
+  geom_ribbon(data = HW_sem_time, aes(ymin=lower, ymax=upper, x=time), fill = "red", alpha = 0.3)+
+  geom_ribbon(data = HW_syn_time, aes(ymin=lower, ymax=upper, x=time), fill = "blue", alpha = 0.3)+
+  geom_ribbon(data = HW_lex_time, aes(ymin=lower, ymax=upper, x=time), fill = "green", alpha = 0.3)+
+  labs(title = "Human-Woz")+
+  xlab('Time') +
+  ylab('Alignment')
+save(HWoZ_align_time,file = "HWoZ_align_time_plot.Rdata")
+
+########################## Human-Computer condition 
+
+#Extract marginal effects 
+con_2 <- data.frame(Com = 1, WOZ = 0, cond="real")
+ma_2 <- marginal_effects(full_brm_beta,conditions = con_2)
+#plot(ma_1,points=TRUE, point_args = list(size = 0.5, alpha = 1/10))
+plot(ma_3)
+
+#Create df with marginal effects to plot 
+HC_all_est = as.data.frame(ma_2[4:6])
+View(HC_all_est)
+
+HC_sem_time = select(HC_all_est, cosinesemanticL.cosinesemanticL_time.time, cosinesemanticL.cosinesemanticL_time.estimate__, cosinesemanticL.cosinesemanticL_time.lower__,cosinesemanticL.cosinesemanticL_time.upper__)
+HC_sem_time = rename(HC_sem_time,"time"=cosinesemanticL.cosinesemanticL_time.time, "estimate" = cosinesemanticL.cosinesemanticL_time.estimate__, "lower" = cosinesemanticL.cosinesemanticL_time.lower__, "upper" = cosinesemanticL.cosinesemanticL_time.upper__)
+HC_sem_time["condition"] = "semantic"
+
+HC_syn_time = select(HC_all_est, cosinesemanticL.cosinesemanticL_time.time, syntaxpennlem2.syntaxpennlem2_time.estimate__, syntaxpennlem2.syntaxpennlem2_time.lower__, syntaxpennlem2.syntaxpennlem2_time.upper__)
+HC_syn_time = rename(HC_syn_time,"time"=cosinesemanticL.cosinesemanticL_time.time, "estimate" = syntaxpennlem2.syntaxpennlem2_time.estimate__, "lower" = syntaxpennlem2.syntaxpennlem2_time.lower__, "upper" = syntaxpennlem2.syntaxpennlem2_time.upper__)
+HC_syn_time["condition"] = "syntax"
+
+HC_lex_time = select(HC_all_est, cosinesemanticL.cosinesemanticL_time.time,  lexicallem2.lexicallem2_time.estimate__, lexicallem2.lexicallem2_time.lower__, lexicallem2.lexicallem2_time.upper__)
+HC_lex_time = rename(HC_lex_time,"time"=cosinesemanticL.cosinesemanticL_time.time, "estimate" =  lexicallem2.lexicallem2_time.estimate__, "lower" = lexicallem2.lexicallem2_time.lower__, "upper" = lexicallem2.lexicallem2_time.upper__)
+HC_lex_time["condition"] = "lexical"
+
+#Plot alignment over time on all three measures with confidence intervals 
+HC_align_time = ggplot2::ggplot() + 
+  geom_line(data = HC_sem_time, aes(x = time, estimate, colour = "blue")) +
+  geom_line(data = HC_syn_time, aes(x = time, y = estimate, colour = "red")) +
+  geom_line(data = HC_lex_time, aes(x = time, y = estimate, colour = "green")) +
+  scale_color_discrete(name = "Alignment measure", labels = c("Semantic", "Syntactic", "Lexical"))+
+  geom_ribbon(data = HC_sem_time, aes(ymin=lower, ymax=upper, x=time), fill = "red", alpha = 0.3)+
+  geom_ribbon(data = HC_syn_time, aes(ymin=lower, ymax=upper, x=time), fill = "blue", alpha = 0.3)+
+  geom_ribbon(data = HC_lex_time, aes(ymin=lower, ymax=upper, x=time), fill = "green", alpha = 0.3)+
+  labs(title = "Human-Computer")+
+  xlab('Time') +
+  ylab('Alignment')
+save(HC_align_time,file = "HC_align_time_plot.Rdata")
+
+########################## Human-Human condition
+con_3 <- data.frame(Com = 0, WOZ = 0, cond="real")
+ma_3 <- marginal_effects(full_brm_beta,conditions = con_3)
+#plot(ma_1,points=TRUE, point_args = list(size = 0.5, alpha = 1/10))
+plot(ma_3)
+
+#Create df with marginal effects to plot 
+HH_all_est = as.data.frame(ma_3[4:6])
+View(HC_all_est)
+
+HH_sem_time = select(HH_all_est, cosinesemanticL.cosinesemanticL_time.time, cosinesemanticL.cosinesemanticL_time.estimate__, cosinesemanticL.cosinesemanticL_time.lower__,cosinesemanticL.cosinesemanticL_time.upper__)
+HH_sem_time = rename(HH_sem_time,"time"=cosinesemanticL.cosinesemanticL_time.time, "estimate" = cosinesemanticL.cosinesemanticL_time.estimate__, "lower" = cosinesemanticL.cosinesemanticL_time.lower__, "upper" = cosinesemanticL.cosinesemanticL_time.upper__)
+HH_sem_time["condition"] = "semantic"
+
+HH_syn_time = select(HH_all_est, cosinesemanticL.cosinesemanticL_time.time, syntaxpennlem2.syntaxpennlem2_time.estimate__, syntaxpennlem2.syntaxpennlem2_time.lower__, syntaxpennlem2.syntaxpennlem2_time.upper__)
+HH_syn_time = rename(HH_syn_time,"time"=cosinesemanticL.cosinesemanticL_time.time, "estimate" = syntaxpennlem2.syntaxpennlem2_time.estimate__, "lower" = syntaxpennlem2.syntaxpennlem2_time.lower__, "upper" = syntaxpennlem2.syntaxpennlem2_time.upper__)
+HH_syn_time["condition"] = "syntax"
+
+HH_lex_time = select(HH_all_est, cosinesemanticL.cosinesemanticL_time.time,  lexicallem2.lexicallem2_time.estimate__, lexicallem2.lexicallem2_time.lower__, lexicallem2.lexicallem2_time.upper__)
+HH_lex_time = rename(HH_lex_time,"time"=cosinesemanticL.cosinesemanticL_time.time, "estimate" =  lexicallem2.lexicallem2_time.estimate__, "lower" = lexicallem2.lexicallem2_time.lower__, "upper" = lexicallem2.lexicallem2_time.upper__)
+HH_lex_time["condition"] = "lexical"
+
+#Plot alignment over time on all three measures with confidence intervals 
+HH_align_time = ggplot2::ggplot() + 
+  geom_line(data = HH_sem_time, aes(x = time, estimate, colour = "blue")) +
+  geom_line(data = HH_syn_time, aes(x = time, y = estimate, colour = "red")) +
+  geom_line(data = HH_lex_time, aes(x = time, y = estimate, colour = "green")) +
+  scale_color_discrete(name = "Alignment measure", labels = c("Semantic", "Syntactic", "Lexical"))+
+  geom_ribbon(data = HH_sem_time, aes(ymin=lower, ymax=upper, x=time), fill = "red", alpha = 0.3)+
+  geom_ribbon(data = HH_syn_time, aes(ymin=lower, ymax=upper, x=time), fill = "blue", alpha = 0.3)+
+  geom_ribbon(data = HH_lex_time, aes(ymin=lower, ymax=upper, x=time), fill = "green", alpha = 0.3)+
+  labs(title = "Human-Human")+
+  xlab('Time') +
+  ylab('Alignment')
+save(HH_align_time,file = "HH_align_time_plot.Rdata")
+
+ggarrange(HH_align_time, HWoZ_align_time, HC_align_time, 
+          labels = c("A", "B", "C"),
+          ncol = 1, nrow = 3)
+
+summary(full_brm_beta)
+
+```
+
+Preliminary Plot: Investigate agent differences for each dataset
+```{r}
+# Plot differences across agents
+P_com=ggplot(dataTMitsuko, aes(y=cosine_semanticL, x=scale(time), color =partner_direction)) + geom_point() + geom_smooth(method= "lm") + scale_color_discrete(name = "Direction", labels = c("Human", "Computer")) + ylab("Semantic Alignment") + xlab("Time") + ggtitle("Human-Computer Interaction")
+
+P_woz=ggplot(dataTCCPE, aes(y=cosine_semanticL, x=scale(time), color =partner_direction)) + geom_smooth() + scale_color_discrete(name = "Direction", labels = c("WoZ", "Human")) + ylab("Semantic Alignment") + xlab("Time") + ggtitle("Human-Wizard of OZ Interaction")
+
+P_human=ggplot(dataTHuman, aes(y=cosine_semanticL, x=scale(time), color =partner_direction)) + geom_smooth()+ scale_color_discrete(name = "Direction", labels = c("HumanA", "HumanB")) + ylab("Semantic Alignment") + xlab("Time") + ggtitle("Human-Human Interaction")
+
+P_comsyn=ggplot(dataTMitsuko, aes(y=syntax_penn_lem2, x=time, color =partner_direction)) + geom_smooth()
+
+P_wozsyn=ggplot(dataTCCPE, aes(y=syntax_penn_lem2, x=time, color =partner_direction)) + geom_smooth() +xlim(0,25)
+
+P_humansyn=ggplot(dataTHuman, aes(y=syntax_penn_lem2, x=time, color =partner_direction)) + geom_smooth()
+
+P_comL=ggplot(dataTMitsuko, aes(y=lexical_lem2, x=time, color =partner_direction)) + geom_smooth()
+
+P_wozL=ggplot(dataTCCPE, aes(y=lexical_lem2, x=time, color =partner_direction)) + geom_smooth() +xlim(0,25)
+
+P_humanL=ggplot(dataTHuman, aes(y=lexical_lem2, x=time, color =partner_direction)) + geom_smooth()
+
+cowplot::plot_grid(P_com, P_woz, P_human, P_comsyn, P_wozsyn, P_humansyn, P_comL, P_wozL, P_humanL)
+
+cowplot::plot_grid(P_com, P_woz, P_human, nrow = 1)
+
+```
+
+Predicting speaker from alignment - HH
+```{r}
+#Predicting speaker from alignment 
+install.packages("pacman")
+library(pacman)
+p_load(magrittr, dplyr, purrr, forcats, tidyr, modelr, tidybayes, ggplot2,ggstance,ggridges,tidybayes,rstan,brms,ggrepel,RColorBrewer,gganimate, brms)
+install.packages("rstan")
+install.packages("rethinking")
+install.packages("Rcpp")
+library(brms)
+
+install.packages(c("mvtnorm","loo","coda"), repos="https://cloud.r-project.org/",dependencies=TRUE)
+options(repos=c(getOption('repos'), rethinking='http://xcelab.net/R'))
+install.packages('rethinking',type='source')
+library(rethinking)
+
+#Human-human
+sp_HH_data = subset(dataHumanTOT, cond=="real")
+
+sp_HH=brm(partner_direction ~ 1 + cosine_semanticL + syntax_penn_lem2 + lexical_lem2 + (1+scale(time)|condition_info), sp_HH_data, family = "bernoulli", chains = 2, cores=2)
+save(sp_HH,file = "sp_HH.Rdata")
+summary(sp_HH)
+plot(sp_HH)
+marginal_effects(sp_HH)
+load("sp_HH.Rdata")
+
+plot(marginal_effects(sp_HH), points = TRUE, rug = TRUE)
+
+#Extract semantic estimates 
+var = get_variables(sp_HH)
+head(var, 10)
+x = spread_draws(sp_HH, b_cosine_semanticL)
+HHsem_df = as.data.frame(x)
+HHsem_df = select(HHsem_df, b_cosine_semanticL)
+HHsem_df = rename(HHsem_df, "estimate" = b_cosine_semanticL)
+HHsem_df["condition"] = "1c: HH semantic"
+
+#Extract syntax estimates 
+x = spread_draws(sp_HH, b_syntax_penn_lem2)
+HHsyn_df = as.data.frame(x)
+HHsyn_df = select(HHsyn_df, b_syntax_penn_lem2)
+HHsyn_df = rename(HHsyn_df, "estimate" = b_syntax_penn_lem2)
+HHsyn_df["condition"] = "1b: HH syntax"
+
+#Extract lexical estimates 
+x = spread_draws(sp_HH, b_lexical_lem2)
+HHlex_df = as.data.frame(x)
+HHlex_df = select(HHlex_df, b_lexical_lem2)
+HHlex_df = rename(HHlex_df, "estimate" = b_lexical_lem2)
+HHlex_df["condition"] = "1a: HH lexical"
+
+#Combine df for all HH estimates 
+HH_est_df = rbind(HHsem_df, HHsyn_df, HHlex_df)
+```
+
+Predicting speaker from alignment - HWoZ
+```{r}
+############################################################################
+#Human-WoZ
+install.packages("rstan", repos = "https://cloud.r-project.org/", dependencies = TRUE)
+library(rstan)
+library(brms)
+library(pacman)
+library(rethinking)
+p_load(devtools, coda, mvtnorm, loo)
+install.packages("mvtnorm")
+library(mvtnorm)
+install.packages("StanHeaders")
+install.packages("pacman")
+library(pacman)
+p_load(tidybayes,dplyr)
+
+sp_HWoZ_data = subset(dataCCPETOT, cond=="real")
+sp_HWoZ_data$partner_direction = relevel(sp_HWoZ_data$partner_direction, ref = "USER>ASSISTANT")
+
+sp_HWoZ=brm(partner_direction ~ 1 + cosine_semanticL + syntax_penn_lem2 + lexical_lem2 + (1+scale(time)|condition_info), sp_HWoZ_data, family = "bernoulli", chains = 2, cores=2)
+
+save(sp_HWoZ,file = "sp_HWoZ.Rdata")
+plot(sp_HWoZ)
+marginal_effects(sp_HWoZ)
+load("sp_HWoZ.Rdata")
+summary(sp_HWoZ)
+
+#Extract semantic estimates 
+var = get_variables(sp_HWoZ)
+head(var, 10)
+x = spread_draws(sp_HWoZ, b_cosine_semanticL)
+HWoZsem_df = as.data.frame(x)
+HWoZsem_df = select(HWoZsem_df, b_cosine_semanticL)
+HWoZsem_df = rename(HWoZsem_df, "estimate" = b_cosine_semanticL)
+HWoZsem_df["condition"] = "2c: HWoZ semantic"
+
+#Extract syntax estimates 
+x = spread_draws(sp_HWoZ, b_syntax_penn_lem2)
+HWoZsyn_df = as.data.frame(x)
+HWoZsyn_df = select(HWoZsyn_df, b_syntax_penn_lem2)
+HWoZsyn_df = rename(HWoZsyn_df, "estimate" = b_syntax_penn_lem2)
+HWoZsyn_df["condition"] = "2b: HWoZ syntax"
+
+#Extract lexical estimates 
+x = spread_draws(sp_HWoZ, b_lexical_lem2)
+HWoZlex_df = as.data.frame(x)
+HWoZlex_df = select(HWoZlex_df, b_lexical_lem2)
+HWoZlex_df = rename(HWoZlex_df, "estimate" = b_lexical_lem2)
+HWoZlex_df["condition"] = "2a: HWoZ lexical"
+
+#Combine all Human-WoZ estimates 
+HWoZ_est_df = rbind(HWoZsem_df, HWoZsyn_df, HWoZlex_df)
+```
+
+Predicting speaker from alignment - HC
+```{r}
+#Human-Computer
+sp_HC_data = subset(dataMitsukoTOT, cond=="real")
+
+sp_HC=brm(partner_direction ~ 1 + cosine_semanticL + syntax_penn_lem2 + lexical_lem2 + (1+scale(time)|condition_info), sp_HC_data, family = "bernoulli", chains = 2, cores=2)
+save(sp_HC,file = "sp_HC.Rdata")
+plot(sp_HC)
+marginal_effects(sp_HC)
+load("sp_HC.Rdata")
+summary(sp_HC)
+
+#Extract semantic estimates 
+var = get_variables(sp_HC)
+head(var, 10)
+x = spread_draws(sp_HC, b_cosine_semanticL)
+HCsem_df = as.data.frame(x)
+HCsem_df = select(HCsem_df, b_cosine_semanticL)
+HCsem_df = rename(HCsem_df, "estimate" = b_cosine_semanticL)
+HCsem_df["condition"] = "3c: HC semantic"
+
+#Extract syntax estimates 
+x = spread_draws(sp_HC, b_syntax_penn_lem2)
+HCsyn_df = as.data.frame(x)
+HCsyn_df = select(HCsyn_df, b_syntax_penn_lem2)
+HCsyn_df = rename(HCsyn_df, "estimate" = b_syntax_penn_lem2)
+HCsyn_df["condition"] = "3b: HC syntax"
+
+#Extract lexical estimates 
+x = spread_draws(sp_HC, b_lexical_lem2)
+HClex_df = as.data.frame(x)
+HClex_df = select(HClex_df, b_lexical_lem2)
+HClex_df = rename(HClex_df, "estimate" = b_lexical_lem2)
+HClex_df["condition"] = "3a: HC lexical"
+
+#Combine all Human-WoZ estimates 
+HC_est_df = rbind(HCsem_df, HCsyn_df, HClex_df)
+```
+
+Plot difference in speaker for all three alignment measures 
+```{r}
+#Plot estimates from all conditions 
+p_load(viridis, ggridges)
+
+full_est_df = rbind(HH_est_df, HWoZ_est_df, HC_est_df)
+
+#Posterior distributions
+ggplot(full_est_df, aes(x=estimate, y=condition, fill = "dk")) +
+  stat_density_ridges(geom = "density_ridges_gradient", calc_ecdf = TRUE)+
+  scale_fill_manual(values = "skyblue3") +
+  labs(title = "Difference between speakers for each alignment measure in each condition",
+      caption = "<0:human speaker, >0:partner ") + 
+      theme(plot.caption = element_text(hjust = 0.5))
+```
+
+Confusion Matrix for prediction of speaker
+```{r}
+load("sp_HC.Rdata")
+load("sp_HH.Rdata")
+load("sp_HWoZ.Rdata")
+
+library(brms)
+predictions=predict(sp_HC, summary = TRUE)
+
+dataTMitsuko=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/Mitsuko/analysis/AlignmentT2T.txt')
+dataTCCPE=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/CCPE/analysis/AlignmentT2T.txt')
+dataTHuman=read.delim('~/Uni_data2/align-linguistic-alignment/align/functions/analysis/HumanHuman/AlignmentT2T.txt')
+
+dataTMitsuko=na.omit(dataTMitsuko)
+dataTCCPE=na.omit(dataTCCPE)
+dataTHuman=na.omit(dataTHuman)
+
+dataTHuman = subset(dataTHuman, partner_direction=="A>B"|partner_direction=="B>A")
+
+### HUMAN-COMPUTER
+
+#use the `predict()` function to calculate the predicted probabilities of pupils in the original data from the fitted model
+Pred <- predict(sp_HC, type = "response")
+Pred <- ifelse(Pred[,1] > 0.5, 1, 0)
+ConfusionMatrix <- table(Pred, dataTMitsuko$partner_direction) #`pull` results in a vector
+#correct classification rate
+sum(diag(ConfusionMatrix))/sum(ConfusionMatrix)
+ConfusionMatrix
+
+### HUMAN-Wizard
+
+Pred <- predict(sp_HWoZ, type = "response")
+Pred <- ifelse(Pred[,1] > 0.5, 1, 0)
+ConfusionMatrix <- table(Pred, dataTCCPE$partner_direction) #`pull` results in a vector
+#correct classification rate
+sum(diag(ConfusionMatrix))/sum(ConfusionMatrix)
+ConfusionMatrix
+
+### HUMAN-HUMAN
+
+Pred <- predict(sp_HH, type = "response")
+Pred <- ifelse(Pred[,1] > 0.5, 1, 0)
+dataTHuman$partner_direction = droplevels(dataTHuman$partner_direction)
+ConfusionMatrix <- table(Pred, dataTHuman$partner_direction) #`pull` results in a vector
+#correct classification rate
+sum(diag(ConfusionMatrix))/sum(ConfusionMatrix)
+ConfusionMatrix
+
+```
+
+Plot histogram of frequency of timepoints
+```{r}
+hist(finalD$time[finalD$int=="H-H"])
+hist(finalD$time[finalD$int=="H-C"])
+hist(finalD$time[finalD$int=="H-WOZ"])
+
+```
+
+Plot raw data distributions
+```{r}
+#Add interaction type
+dataTHuman$int="H-H"
+dataTMitsuko$int="H-C"
+dataTCCPE$int = "H-WOZ"
+
+# Remove stanford pos-tagger
+dataTMitsuko2=dataTMitsuko[,-4:-5]
+
+RealData=rbind(dataTHuman, dataTCCPE, dataTMitsuko2)
+
+# Recode partner variable
+RealData$Partner[RealData$partner_direction== "B>A"] = "Human"
+RealData$Partner[RealData$partner_direction== "A>B"] = "Human"
+RealData$Partner[RealData$partner_direction== "Judge:>Mitsuku:"] = "Human"
+RealData$Partner[RealData$partner_direction== "Mitsuku:>Judge:"] = "Computer"
+RealData$Partner[RealData$partner_direction== "ASSISTANT>USER"] = "WoZ"
+RealData$Partner[RealData$partner_direction== "USER>ASSISTANT"] = "Human"
+
+RealData$color[RealData$partner_direction== "B>A"] = "B"
+RealData$color[RealData$partner_direction== "A>B"] = "A"
+RealData$color[RealData$partner_direction== "Judge:>Mitsuku:"] = "A"
+RealData$color[RealData$partner_direction== "Mitsuku:>Judge:"] = "B"
+RealData$color[RealData$partner_direction== "ASSISTANT>USER"] = "A"
+RealData$color[RealData$partner_direction== "USER>ASSISTANT"] = "B"
+
+library(ggplot2)
+library(cowplot)
+
+sem=ggplot(RealData, aes(x=int, y= cosine_semanticL, fill = Partner, colour = color)) + geom_violin() + xlab("Interaction type") + ylab("Semantic Alignment") + scale_fill_brewer() + scale_color_manual(values=c("black", "black")) +guides(colour=FALSE)
+
+lex=ggplot(RealData, aes(x=int, y= lexical_lem2, fill = Partner, colour = color)) + geom_violin() + xlab("Interaction type") + ylab("Lexical Alignment")+ scale_fill_brewer() + scale_color_manual(values=c("black", "black")) +guides(colour=FALSE)
+
+syn=ggplot(RealData, aes(x=int, y= syntax_penn_lem2, fill = Partner, colour = color)) + geom_violin() + xlab("Interaction type") + ylab("Syntactic Alignment") + scale_fill_brewer() + scale_color_manual(values=c("black", "black")) +guides(colour=FALSE)
+
+prow=cowplot::plot_grid(lex + theme(legend.position="none"), syn + theme(legend.position="none"), sem + theme(legend.position="none"), nrow =1)
+
+legend <- get_legend(
+  # create some space to the left of the legend
+  sem + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+# add the legend to the row we made earlier. Give it one-third of 
+# the width of one plot (via rel_widths).
+plot_grid(prow, legend, rel_widths = c(3, .4))
+
+
+
+```
+
+Extra plots
+```{r}
+# MITSUKO: Plot surrogate vs. real 
+Mit_syn=ggplot(dataMitsukoTOT, aes(y=syntax_penn_lem2, x=time, color = cond)) + geom_smooth(method = "lm") + xlim(0,40)
+Mit_lex=ggplot(dataMitsukoTOT, aes(y=lexical_lem2, x=time, color = cond)) + geom_smooth(method = "lm") + xlim(0,40)
+Mit_sem=ggplot(dataMitsukoTOT, aes(y=cosine_semanticL, x=time, color = cond)) + geom_smooth(method = "lm") + xlim(0,40)
+
+cowplot::plot_grid(Mit_syn, Mit_lex, Mit_sem, nrow=1)
+
+Mit_sub = dataMitsukoTOT[c(-2,-4,-5, -6, -9, -10)]
+
+Mit_long <- Mit_sub %>% 
+  gather(type, alignment, syntax_penn_lem2:cosine_semanticL) 
+
+Mit_bar=ggplot(Mit_long, aes(y=alignment, x=type, fill = cond)) + stat_summary(fun.y = mean, geom = "bar", na.rm = TRUE, position=position_dodge()) + stat_summary(fun.data = mean_cl_normal, geom = "errorbar", fun.args = list(mult = 1), position=position_dodge(.9), width = 0.5) + ggtitle("Human-Computer") + scale_x_discrete(name="Alignment Type", labels=c("Semantic", "Lexical", "Syntactical")) + ylab("Alignment score") + scale_fill_brewer(name = "Pair", labels=c("Real", "Surrogate"))
+
+
+# HUMAN DATA
+ggplot(dataHumanTOT, aes(y=syntax_penn_lem2, x=time, color = cond)) + geom_smooth() + xlim(0,75)
+ggplot(dataHumanTOT, aes(y=lexical_tok2, x=time, color = cond)) + geom_smooth() + xlim(0,75)
+ggplot(dataHumanTOT, aes(y=cosine_semanticL, x=time, color = cond)) + geom_smooth() + xlim(0,75)
+
+Hum_sub = dataHumanTOT[c(-2,-4, -7, -8)]
+
+Hum_long <- Hum_sub %>% 
+  gather(type, alignment, syntax_penn_lem2:cosine_semanticL) 
+
+Hum_bar=ggplot(Hum_long, aes(y=alignment, x=type, fill = cond)) + stat_summary(fun.y = mean, geom = "bar", na.rm = TRUE, position=position_dodge()) + stat_summary(fun.data = mean_cl_normal, geom = "errorbar", fun.args = list(mult = 1), position=position_dodge(.9), width = 0.5) + ggtitle("Human-Human") + scale_x_discrete(name="Alignment Type", labels=c("Semantic", "Lexical", "Syntactical")) + ylab("Alignment score") + scale_fill_brewer(name = "Pair", labels=c("Real", "Surrogate")) + theme(legend.position = "none")
+
+# CCPE DATA
+
+ggplot(dataCCPETOT[dataCCPETOT$partner_direction == "USER>ASSISTANT",], aes(y=cosine_semanticL, x=time, color = cond)) + geom_smooth() + xlim(0,30)
+
+CCPE_sub = dataCCPETOT[c(-2,-4, -7, -8)]
+
+CCPE_long <- CCPE_sub %>% 
+  gather(type, alignment, syntax_penn_lem2:cosine_semanticL) 
+
+
+CCPE_bar=ggplot(CCPE_long, aes(y=alignment, x=type, fill = cond)) + stat_summary(fun.y = mean, geom = "bar", na.rm = TRUE, position=position_dodge()) + stat_summary(fun.data = mean_cl_normal, geom = "errorbar", fun.args = list(mult = 1), position=position_dodge(.9), width = 0.5) + ggtitle("Human-WoZ") + scale_x_discrete(name="Alignment Type", labels=c("Semantic", "Lexical", "Syntactical")) + ylab("Alignment score") + scale_fill_brewer(name = "Pair", labels=c("Real", "Surrogate")) + theme(legend.position = "none")
+
+prow=cowplot::plot_grid(Hum_bar, CCPE_bar, Mit_bar+ theme(legend.position="none"), nrow =1)
+
+legend <- get_legend(
+  # create some space to the left of the legend
+  Mit_bar + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+# add the legend to the row we made earlier. Give it one-third of 
+# the width of one plot (via rel_widths).
+plot_grid(prow, legend, rel_widths = c(3, .4))
+
+```
